@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendrier des agents</title>
+<style>
+/* Mise en page : en-tête avec choix de l'agent, trois mois empilés, puis l'équipe du jour sélectionné */
+:root{
+  --bg:#f6f5f2; --card:#ffffff; --ink:#1d2433; --muted:#6b7385; --line:#e2e0da;
+  --jour:#f2b632; --jour-ink:#3a2a00; --nuit:#2f4aa8; --nuit-ink:#ffffff; --accent:#2f4aa8;
+  --we:#f1ece6; --font:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171f; --card:#1c212c; --ink:#e8ebf2; --muted:#98a0b3; --line:#2c3342;
+    --jour:#d9a02a; --jour-ink:#201600; --nuit:#5d79d6; --nuit-ink:#0d1226; --accent:#8da3ee; --we:#222836; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171f; --card:#1c212c; --ink:#e8ebf2; --muted:#98a0b3; --line:#2c3342;
+  --jour:#d9a02a; --jour-ink:#201600; --nuit:#5d79d6; --nuit-ink:#0d1226; --accent:#8da3ee; --we:#222836; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.4}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.95rem}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+label{font-weight:600;font-size:.9rem;display:block;margin-bottom:6px}
+select{width:100%;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+select:focus-visible,.cell:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:.88rem}
+.chip b{font-variant-numeric:tabular-nums}
+.roul{margin-top:12px;font-size:.92rem}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.88rem;color:var(--muted);margin-bottom:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+.sw.j{background:var(--jour)} .sw.n{background:var(--nuit)} .sw.r{background:var(--bg);border:1px solid var(--line)}
+.sw.m{background:transparent;border:2px solid var(--accent)}
+h2{font-size:1.05rem;margin:0 0 8px;text-transform:capitalize}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.dow{font-size:.75rem;color:var(--muted);text-align:center;padding-bottom:2px}
+.cell{border:1px solid var(--line);border-radius:6px;min-height:50px;padding:3px;display:flex;flex-direction:column;justify-content:space-between;background:var(--card);color:var(--ink);font:inherit;cursor:pointer;text-align:left}
+.cell.we{background:var(--we)}
+.cell.empty{visibility:hidden;border:0}
+.cell .dn{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.cell .tag{font-weight:700;font-size:.8rem;text-align:center;border-radius:4px;padding:1px 0}
+.cell.J .tag{background:var(--jour);color:var(--jour-ink)}
+.cell.N .tag{background:var(--nuit);color:var(--nuit-ink)}
+.cell.R .tag{color:var(--muted);font-weight:400}
+.cell.mark{outline:2px solid var(--accent);outline-offset:-2px}
+.cell.sel{box-shadow:0 0 0 3px var(--accent)}
+.team h3{margin:0 0 6px;font-size:1rem}
+.team p{margin:6px 0;font-size:.9rem}
+.team .lab{font-weight:700}
+.note{color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Calendrier des agents</h1>
+  <p class="sub">Trame 12h du 1er janvier au 31 mars 2027 : 10 postes de jour, 7 postes de nuit.</p>
+  <div class="panel">
+    <label for="agent">Agent</label>
+    <select id="agent"></select>
+    <div class="chips" id="chips"></div>
+    <div class="roul" id="roul"></div>
+  </div>
+  <div class="legend">
+    <span><i class="sw j"></i>Jour 7h-19h</span><span><i class="sw n"></i>Nuit 19h-7h</span><span><i class="sw r"></i>Repos</span><span><i class="sw m"></i>Fin du 1er roulement complet</span>
+  </div>
+  <div id="months"></div>
+  <div class="panel team" id="team"></div>
+  <p class="note">Touchez un jour pour voir qui travaille ce jour-là. Les noms sont fictifs (Agent 01 à 60).</p>
+</div>
+<script>
+const DATA=__DATA__;
+const START=new Date(2027,0,1);
+const MOIS=["janvier","février","mars"], JS=["L","M","M","J","V","S","D"];
+const fmt=d=>d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
+const fmtLong=d=>d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const gcd=(a,b)=>b?gcd(b,a%b):a;
+let cur=0, selDay=0;
+const sel=document.getElementById("agent");
+DATA.forEach((a,i)=>{const o=document.createElement("option");o.value=i;o.textContent=`${a[0]} · ${a[1]} · ${a[2]}`;sel.appendChild(o)});
+sel.addEventListener("change",()=>{cur=+sel.value;render()});
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function render(){
+  const a=DATA[cur], row=a[4], cyc=a[3].length, L=cyc*7/gcd(cyc,7);
+  const nj=[...row].filter(c=>c==="J").length, nn=[...row].filter(c=>c==="N").length;
+  document.getElementById("chips").innerHTML=
+    `<span class="chip">Cycle <b>${cyc>10?"4 × (J N R R R) + 2 J":a[3].split("").join(" ")}</b> (${cyc} jours)</span>`+
+    `<span class="chip"><b>${nj}</b> jours · <b>${nn}</b> nuits</span><span class="chip"><b>${(nj+nn)*12}</b> h sur 3 mois</span>`;
+  const fin=addDays(START,L-1), nxt=addDays(START,L);
+  document.getElementById("roul").innerHTML=`Roulement complet : <b>${L} jours</b>, terminé le <b>${fmt(fin)}</b>. À partir du <b>${fmt(nxt)}</b>, le planning recommence à l'identique.`;
+  const box=document.getElementById("months"); box.innerHTML="";
+  for(let m=0;m<3;m++){
+    const first=new Date(2027,m,1), nd=new Date(2027,m+1,0).getDate(), off=(first.getDay()+6)%7;
+    const p=document.createElement("div"); p.className="panel";
+    let h=`<h2>${MOIS[m]} 2027</h2><div class="grid">`+JS.map(x=>`<div class="dow">${x}</div>`).join("");
+    for(let i=0;i<off;i++) h+=`<div class="cell empty"></div>`;
+    for(let d=1;d<=nd;d++){
+      const dt=new Date(2027,m,d), idx=Math.round((dt-START)/864e5), c=row[idx], we=(dt.getDay()===0||dt.getDay()===6);
+      h+=`<button class="cell ${c}${we?" we":""}${idx===L-1?" mark":""}${idx===selDay?" sel":""}" data-i="${idx}" aria-label="${fmtLong(dt)} : ${c==="J"?"jour":c==="N"?"nuit":"repos"}"><span class="dn">${d}</span><span class="tag">${c==="R"?"·":c}</span></button>`;
+    }
+    p.innerHTML=h+"</div>"; box.appendChild(p);
+  }
+  box.querySelectorAll(".cell[data-i]").forEach(b=>b.addEventListener("click",()=>{selDay=+b.dataset.i;render()}));
+  const jr=[],nt=[];DATA.forEach((x,i)=>{if(x[4][selDay]==="J")jr.push(x[0].replace("Agent ",""));if(x[4][selDay]==="N")nt.push(x[0].replace("Agent ",""))});
+  document.getElementById("team").innerHTML=`<h3>${fmtLong(addDays(START,selDay))}</h3>`+
+    `<p><span class="lab">Jour (${jr.length}/10) :</span> ${jr.join(", ")}</p><p><span class="lab">Nuit (${nt.length}/7) :</span> ${nt.join(", ")}</p>`+
+    `<p class="note">Numéros d'agents. L'effectif au-delà de 10 jour / 7 nuit absorbe congés, RTT et arrêts.</p>`;
+}
+render();
+</script>
+</body>
+</html>
